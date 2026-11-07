@@ -1,0 +1,34 @@
+# Copy to anjeo.toml. Secrets are never written here: reference them as ${ENV_VAR}.
+
+[agent]
+owner_name = "Coll"
+model = "claude-opus-5-5"
+effort = "high"        # low | medium | high | xhigh | max
+max_steps = 12
+
+[policy]
+default = "approve"    # what happens to a tool nothing else classifies
+approval_ttl_hours = 24
+
+# First match wins; patterns match the namespaced name: <server>__<tool>.
+[[policy.rules]]
+match = "linkedin__linkedin_delete_post"
+action = "deny"
+
+[[policy.rules]]
+match = "linkedin__automation_*"
+action = "approve"
+
+# ── Servers ───────────────────────────────────────────────────────────────
+# Remote, over Streamable HTTP (your linkedin-mcp-server deployment).
+[[servers]]
+id = "linkedin"
+name = "LinkedIn + Mail"
+url = "https://your-linkedin-mcp.example.com/mcp"
+headers = { Authorization = "Bearer ${LINKEDIN_MCP_TOKEN}" }
+
+# Local, over stdio (any MCP server you can launch as a command).
+# [[servers]]
+# id = "files"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/coll/notes"]

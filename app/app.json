@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Anjeo",
+    "slug": "anjeo",
+    "scheme": "anjeo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": { "backgroundColor": "#0b0d12" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.anjeo.app" },
+    "android": { "package": "com.anjeo.app" }
+  }
+}
