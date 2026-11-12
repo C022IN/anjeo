@@ -27,6 +27,47 @@ name = "LinkedIn + Mail"
 url = "https://your-linkedin-mcp.example.com/mcp"
 headers = { Authorization = "Bearer ${LINKEDIN_MCP_TOKEN}" }
 
+# FXRizon, through its MCP adapter (FXRizon repo: bridges/anjeo_mcp).
+[[servers]]
+id = "fxrizon"
+name = "FXRizon"
+url = "https://your-fxrizon-host:8791/mcp"
+headers = { Authorization = "Bearer ${FXRIZON_MCP_TOKEN}" }
+
+# ── Mandates: where Anjeo may act without asking ──────────────────────────
+# Inside every limit: runs at once. Outside any: waits in your Inbox with the reason.
+# Owner-only tools (kill switch, resume, AI profile) can never carry a mandate.
+[[mandates]]
+id = "fx-demo"
+tool = "fxrizon__fxrizon_submit_ticket"
+max_per_day = 3              # autonomous tickets per UTC day; approvals you give don't count
+approval_ttl_minutes = 15    # a trade that waits for you goes stale fast
+note = "Demo group only until the traces earn more."
+
+[mandates.args.risk_pct]
+required = true
+max = 0.25                   # FXRizon's adapter enforces its own ceiling too (FXRIZON_ANJEO_MAX_RISK_PCT)
+
+[mandates.args.symbol]
+one_of = ["XAUUSD"]
+
+[mandates.args.group]
+one_of = ["anjeo_demo"]
+
+[[mandates.checks]]          # live: if the worst account is down 2% today, stop and ask
+tool = "fxrizon__fxrizon_risk_state"
+path = "worst_day_pnl_pct"
+min = -2.0
+label = "worst day P&L %"
+
+# ── Routines: what Anjeo thinks about on its own ──────────────────────────
+[[routines]]
+id = "gold-watch"
+every_minutes = 15
+prompt = """Read XAUUSD on the demo feed (fxrizon_risk_state, fxrizon_candles M15 and H1, fxrizon_positions).
+If, and only if, there is a clear setup with a structural stop, preview it, then send ONE ticket to anjeo_demo
+inside the fx-demo mandate. Otherwise do nothing and say in one line why."""
+
 # Local, over stdio (any MCP server you can launch as a command).
 # [[servers]]
 # id = "files"

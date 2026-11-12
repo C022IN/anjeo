@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-export type Policy = 'allow' | 'approve' | 'deny'
+export type Policy = 'allow' | 'approve' | 'deny' | 'mandate'
 
 export type Server = {
   id: string
@@ -28,6 +28,7 @@ export type Tool = {
   input_schema: JsonSchema
   policy: Policy
   policy_reason: string
+  owner_only?: boolean
 }
 
 export type Approval = {
@@ -55,9 +56,32 @@ export type CallOutcome = {
 
 export type AskResult = {
   answer: string
-  steps: { tool: string; status: string; approval_id?: string }[]
+  steps: { tool: string; status: string; approval_id?: string; mandate?: string }[]
   pending_approvals: string[]
   stop_reason: string | null
+}
+
+export type Mandate = {
+  id: string
+  tool: string
+  enabled: boolean
+  active: boolean
+  inactive_reason: string | null
+  max_per_day: number | null
+  used_today: number
+  args: Record<string, { required: boolean; min: number | null; max: number | null; one_of: unknown[] | null }>
+  checks: { tool: string; path: string; min: number | null; max: number | null; label: string }[]
+  note: string
+}
+
+export type Routine = {
+  id: string
+  prompt: string
+  every_minutes: number
+  enabled: boolean
+  running: boolean
+  last_run: number | null
+  last_answer: string | null
 }
 
 export type Activity = { id: number; at: number; kind: string; tool: string | null; status: string; detail: unknown }
@@ -117,6 +141,9 @@ export function client(conn: Connection) {
     approvals: (status = 'pending') => request<Approval[]>(`/approvals?status=${encodeURIComponent(status)}`),
     approve: (id: string) => post<CallOutcome & { approval_id: string }>(`/approvals/${id}/approve`),
     reject: (id: string) => post<{ status: string }>(`/approvals/${id}/reject`),
+    mandates: () => request<Mandate[]>('/mandates'),
+    routines: () => request<Routine[]>('/routines'),
+    runRoutine: (id: string) => post<AskResult>(`/routines/${encodeURIComponent(id)}/run`),
     activity: () => request<Activity[]>('/activity?limit=100'),
     memory: () => request<Memory[]>('/memory'),
     remember: (key: string, value: string) =>

@@ -30,6 +30,7 @@ SEP = "__"
 _UNSAFE = re.compile(r"[^a-zA-Z0-9_-]")
 # Claude and most MCP clients cap tool names at 64 characters.
 MAX_TOOL_NAME = 64
+OWNER_ONLY_META = "anjeo/owner_only"
 
 Connector = Callable[[ServerConfig], AbstractAsyncContextManager[Client]]
 
@@ -42,6 +43,9 @@ class ToolInfo:
     description: str
     input_schema: dict[str, Any]
     annotations: dict[str, Any] = field(default_factory=dict)
+    # A server may mark a tool as needing its owner every time (`"anjeo/owner_only": true` in the
+    # tool's _meta). That only ever makes a tool stricter, so it is safe to trust.
+    owner_only: bool = False
 
     def public(self) -> dict[str, Any]:
         return {
@@ -51,6 +55,7 @@ class ToolInfo:
             "description": self.description,
             "input_schema": self.input_schema,
             "annotations": self.annotations,
+            "owner_only": self.owner_only,
         }
 
 
@@ -158,6 +163,7 @@ class Hub:
             description=tool.description or tool.title or "",
             input_schema=tool.input_schema or {"type": "object", "properties": {}},
             annotations=ann,
+            owner_only=bool((tool.meta or {}).get(OWNER_ONLY_META)),
         )
 
     # ── lookup & execution ─────────────────────────────────────────────────

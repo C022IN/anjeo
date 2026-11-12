@@ -89,6 +89,7 @@ class Store:
         intent: str | None,
         ttl_hours: float,
     ) -> dict[str, Any]:
+        # `reason` explains why the owner is being asked, e.g. "outside mandate fx: risk_pct 0.8 > 0.5".
         now = time.time()
         approval_id = secrets.token_urlsafe(9)
         await self.db.execute(
@@ -147,6 +148,18 @@ class Store:
             (time.time(), kind, tool, status, json.dumps(detail, default=str)),
         )
         await self.db.commit()
+
+    async def mandate_executions_today(self, mandate_id: str) -> int:
+        """Executions under a mandate since 00:00 UTC (approved-by-owner runs don't count)."""
+        now = time.time()
+        midnight = now - (now % 86400)
+        async with self.db.execute(
+            "SELECT COUNT(*) FROM activity WHERE kind = 'call' AND status = 'executed' AND at >= ?"
+            " AND json_extract(detail, '$.mandate') = ?",
+            (midnight, mandate_id),
+        ) as cur:
+            row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
     async def activity(self, limit: int = 100) -> list[dict[str, Any]]:
         async with self.db.execute("SELECT * FROM activity ORDER BY id DESC LIMIT ?", (limit,)) as cur:

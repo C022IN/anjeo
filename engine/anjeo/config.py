@@ -67,6 +67,57 @@ class PolicyConfig(BaseModel):
     approval_ttl_hours: float = 24.0
 
 
+class ArgLimit(BaseModel):
+    """A limit on one argument of a mandated tool call."""
+
+    required: bool = False
+    min: float | None = None
+    max: float | None = None
+    one_of: list[str | int | float] | None = None
+
+
+class MandateCheck(BaseModel):
+    """A live precondition: call a read tool, read one number, require it in range.
+
+    If the tool fails or the number cannot be read, the check fails, and the call
+    goes to the Inbox. A mandate can never be satisfied by missing data.
+    """
+
+    tool: str
+    path: str  # dotted path into the result, e.g. "data.day_pnl_pct"
+    arguments: dict = Field(default_factory=dict)
+    min: float | None = None
+    max: float | None = None
+    label: str = ""
+
+
+class Mandate(BaseModel):
+    """Standing permission for one tool, inside limits the owner wrote down.
+
+    Inside every limit the call runs without asking. Outside any limit it waits
+    in the Inbox with the reason. Owner-only tools can never carry a mandate.
+    """
+
+    id: str
+    tool: str  # namespaced tool name, exact
+    enabled: bool = True
+    max_per_day: int | None = Field(default=None, ge=0)  # executions per UTC day under this mandate
+    args: dict[str, ArgLimit] = Field(default_factory=dict)
+    checks: list[MandateCheck] = Field(default_factory=list)
+    # Out-of-mandate calls wait this long, not the global TTL: a stale trade must not run hours later.
+    approval_ttl_minutes: float | None = Field(default=None, gt=0)
+    note: str = ""
+
+
+class Routine(BaseModel):
+    """A standing intent: Anjeo thinks about `prompt` on a schedule and acts within its mandates."""
+
+    id: str
+    prompt: str = Field(min_length=1)
+    every_minutes: float = Field(ge=5)
+    enabled: bool = True
+
+
 class AgentConfig(BaseModel):
     model: str = "claude-opus-5-5"
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
@@ -78,6 +129,8 @@ class Settings(BaseModel):
     servers: list[ServerConfig] = Field(default_factory=list)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    mandates: list[Mandate] = Field(default_factory=list)
+    routines: list[Routine] = Field(default_factory=list)
     database: str = "anjeo.db"
     # Bearer token the app must present. Read from ANJEO_TOKEN, never the file.
     api_token: str | None = None
@@ -89,6 +142,24 @@ class Settings(BaseModel):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"duplicate server ids: {sorted(dupes)}")
+        return v
+
+    @field_validator("mandates")
+    @classmethod
+    def _one_mandate_per_tool(cls, v: list[Mandate]) -> list[Mandate]:
+        for attr in ("id", "tool"):
+            seen = [getattr(m, attr) for m in v]
+            dupes = {x for x in seen if seen.count(x) > 1}
+            if dupes:
+                raise ValueError(f"duplicate mandate {attr}s: {sorted(dupes)}")
+        return v
+
+    @field_validator("routines")
+    @classmethod
+    def _unique_routines(cls, v: list[Routine]) -> list[Routine]:
+        ids = [r.id for r in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate routine ids")
         return v
 
 

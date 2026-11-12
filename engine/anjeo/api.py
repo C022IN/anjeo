@@ -10,6 +10,9 @@ GET  /approvals?status=pending       the inbox
 POST /approvals/{id}/approve|reject  decide
 GET  /activity                       the ledger
 GET/PUT/DELETE /memory[/{key}]       what the digital self knows about you
+GET  /mandates                       standing permissions and today's usage
+GET  /routines                       Anjeo's scheduled thinking
+POST /routines/{id}/run              think now
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from anjeo.agent import Agent
 from anjeo.config import Settings, load_settings
 from anjeo.gateway import ApprovalError, Gateway
 from anjeo.hub import Connector, Hub, default_connector
+from anjeo.routines import Routines
 from anjeo.store import Store
 
 logger = logging.getLogger("anjeo.api")
@@ -51,6 +55,7 @@ def create_app(
     *,
     connector: Connector = default_connector,
     agent: Agent | None = None,
+    start_routines: bool = True,
 ) -> FastAPI:
     settings = settings or load_settings()
 
@@ -60,16 +65,24 @@ def create_app(
         await store.open()
         hub = Hub(settings.servers, connector=connector)
         await hub.refresh()
-        gateway = Gateway(hub, store, settings.policy)
+        gateway = Gateway(hub, store, settings.policy, settings.mandates)
         app.state.gateway = gateway
         app.state.agent = agent or Agent(gateway, settings.agent)
         if agent is not None:
             agent.gateway = gateway
+        routines = Routines(app.state.agent, settings.routines)
+        app.state.routines = routines
+        if start_routines:
+            routines.start()
+        for m in settings.mandates:
+            if m.enabled and m.tool in {t.name for t in hub.tools()} and gateway.mandate_for(m.tool) is None:
+                logger.warning("mandate %s cannot act: %s is owner-only or not an approval tool", m.id, m.tool)
         if not settings.api_token:
             logger.warning("ANJEO_TOKEN is not set: the API is open to anyone who can reach it. Local use only.")
         try:
             yield
         finally:
+            await routines.stop()
             await store.close()
 
     app = FastAPI(title="Anjeo", version=__version__, lifespan=lifespan)
@@ -108,7 +121,10 @@ def create_app(
         out = []
         for t in sorted(g.hub.tools(), key=lambda t: t.name):
             d = g.decision(t.name)
-            out.append({**t.public(), "policy": d.action, "policy_reason": d.reason})
+            entry = {**t.public(), "policy": d.action, "policy_reason": d.reason}
+            if m := g.mandate_for(t.name):
+                entry["policy"], entry["policy_reason"] = "mandate", f"runs inside mandate {m.id}, else asks you"
+            out.append(entry)
         return out
 
     @app.post("/tools/call", dependencies=auth)
@@ -162,5 +178,20 @@ def create_app(
             raise HTTPException(404, f"no memory {key!r}")
         await g.store.log("memory", "deleted", {"key": key})
         return {"deleted": key}
+
+    @app.get("/mandates", dependencies=auth)
+    async def mandates(g: Gateway = Depends(gw)):
+        return await g.mandates_public()
+
+    @app.get("/routines", dependencies=auth)
+    async def routines_list(request: Request):
+        return request.app.state.routines.public()
+
+    @app.post("/routines/{routine_id}/run", dependencies=auth)
+    async def routine_run(routine_id: str, request: Request) -> dict[str, Any]:
+        routines: Routines = request.app.state.routines
+        if routine_id not in routines.routines:
+            raise HTTPException(404, f"no routine {routine_id!r}")
+        return await routines.run_once(routine_id)
 
     return app

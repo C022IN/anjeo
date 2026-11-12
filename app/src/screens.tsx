@@ -9,7 +9,9 @@ import {
   type CallOutcome,
   type Connection,
   type JsonSchema,
+  type Mandate,
   type Memory,
+  type Routine,
   type Server,
   type Tool,
 } from './api'
@@ -126,8 +128,8 @@ export function AskScreen({ api, onQueued }: { api: Api; onQueued: () => void })
               {result.steps.map((st, j) => (
                 <View key={j} style={s.row}>
                   <Pill
-                    text={st.status === 'pending_approval' ? 'approve' : st.status}
-                    tone={st.status === 'executed' ? 'ok' : st.status === 'pending_approval' ? 'warn' : 'bad'}
+                    text={st.mandate ? `mandate · ${st.mandate}` : st.status === 'pending_approval' ? 'approve' : st.status}
+                    tone={st.mandate ? 'accent' : st.status === 'executed' ? 'ok' : st.status === 'pending_approval' ? 'warn' : 'bad'}
                   />
                   <Text style={t.dim}>{st.tool}</Text>
                 </View>
@@ -480,6 +482,10 @@ export function MeScreen({
       <Button label="Remember" onPress={add} disabled={!key.trim() || !value.trim()} />
 
       <View style={{ height: 28 }} />
+      <MandatesSection api={api} />
+      <View style={{ height: 28 }} />
+      <RoutinesSection api={api} />
+      <View style={{ height: 28 }} />
       <Text style={t.h2}>Connection</Text>
       <TextInput
         style={s.input}
@@ -506,5 +512,104 @@ export function MeScreen({
       </View>
       {health && <Text style={[t.dim, { marginTop: 8 }]}>{health}</Text>}
     </Screen>
+  )
+}
+
+function limitText(name: string, l: Mandate['args'][string]): string {
+  const parts: string[] = []
+  if (l.min !== null && l.max !== null) parts.push(`${l.min}–${l.max}`)
+  else if (l.max !== null) parts.push(`≤ ${l.max}`)
+  else if (l.min !== null) parts.push(`≥ ${l.min}`)
+  if (l.one_of) parts.push(l.one_of.join(' / '))
+  if (l.required && !parts.length) parts.push('required')
+  return `${name}: ${parts.join(', ')}`
+}
+
+function MandatesSection({ api }: { api: Api }) {
+  const { data, error } = useLoad(() => api.mandates(), [api])
+  return (
+    <View>
+      <Text style={t.h2}>Mandates</Text>
+      <Text style={[t.dim, { marginBottom: 10 }]}>
+        Where Anjeo may act without asking. Outside these limits it asks you. Edit them in anjeo.toml.
+      </Text>
+      <ErrorLine text={error} />
+      {data && data.length === 0 && <Text style={t.dim}>None. Every action asks you first.</Text>}
+      {data?.map((m) => (
+        <Card key={m.id}>
+          <View style={[s.row, { justifyContent: 'space-between' }]}>
+            <Text style={t.h2}>{m.id}</Text>
+            <Pill text={m.active ? 'active' : 'inactive'} tone={m.active ? 'accent' : 'dim'} />
+          </View>
+          <Text style={[t.dim, { marginBottom: 6 }]}>{m.tool}</Text>
+          {Object.entries(m.args).map(([name, l]) => (
+            <Text key={name} style={t.body}>
+              {limitText(name, l)}
+            </Text>
+          ))}
+          {m.checks.map((c, i) => (
+            <Text key={i} style={t.body}>
+              {c.label || c.path}: {c.min !== null ? `≥ ${c.min}` : ''}
+              {c.max !== null ? ` ≤ ${c.max}` : ''} (checked live)
+            </Text>
+          ))}
+          {m.max_per_day !== null && (
+            <Text style={t.body}>
+              today: {m.used_today} / {m.max_per_day}
+            </Text>
+          )}
+          {m.inactive_reason && <Text style={[t.dim, { marginTop: 6 }]}>{m.inactive_reason}</Text>}
+        </Card>
+      ))}
+    </View>
+  )
+}
+
+function RoutinesSection({ api }: { api: Api }) {
+  const { data, error, reload, setError } = useLoad(() => api.routines(), [api])
+  const [busy, setBusy] = useState<string | null>(null)
+
+  async function think(r: Routine) {
+    setBusy(r.id)
+    try {
+      await api.runRoutine(r.id)
+      reload()
+    } catch (e) {
+      setError(describeError(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <View>
+      <Text style={t.h2}>Routines</Text>
+      <Text style={[t.dim, { marginBottom: 10 }]}>What Anjeo thinks about on its own, and what it last concluded.</Text>
+      <ErrorLine text={error} />
+      {data && data.length === 0 && <Text style={t.dim}>None scheduled.</Text>}
+      {data?.map((r) => (
+        <Card key={r.id}>
+          <View style={[s.row, { justifyContent: 'space-between' }]}>
+            <Text style={t.h2}>{r.id}</Text>
+            <Text style={t.dim}>
+              every {r.every_minutes}m{r.last_run ? ` · ${ago(r.last_run)}` : ''}
+            </Text>
+          </View>
+          <Text style={[t.dim, { marginBottom: 6 }]}>{r.prompt}</Text>
+          {r.last_answer && (
+            <Text style={[t.body, { marginBottom: 8 }]} selectable>
+              {r.last_answer}
+            </Text>
+          )}
+          <Button
+            label={r.running || busy === r.id ? 'Thinking…' : 'Think now'}
+            kind="ghost"
+            onPress={() => think(r)}
+            busy={busy === r.id}
+            disabled={r.running}
+          />
+        </Card>
+      ))}
+    </View>
   )
 }

@@ -47,8 +47,8 @@ export function Button({
   )
 }
 
-export function Pill({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim' }) {
-  const c = { ok: color.ok, warn: color.warn, bad: color.bad, dim: color.dim }[tone]
+export function Pill({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'bad' | 'dim' | 'accent' }) {
+  const c = { ok: color.ok, warn: color.warn, bad: color.bad, dim: color.dim, accent: color.accent }[tone]
   return (
     <View style={[s.pill, { borderColor: c }]}>
       <Text style={[s.pillText, { color: c }]}>{text}</Text>
@@ -56,7 +56,7 @@ export function Pill({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'bad'
   )
 }
 
-export const policyTone = { allow: 'ok', approve: 'warn', deny: 'bad' } as const
+export const policyTone = { allow: 'ok', approve: 'warn', deny: 'bad', mandate: 'accent' } as const
 
 export function Empty({ text }: { text: string }) {
   return <Text style={[t.dim, { textAlign: 'center', marginTop: 32 }]}>{text}</Text>

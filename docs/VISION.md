@@ -23,11 +23,22 @@ Three things make that real:
 - App: Ask, Inbox (with a live badge), Tools (a form built from each tool's
   JSON Schema), Activity, Me (memory and connection).
 
+## Shipped in v0.2: bounded autonomy
+
+- **Mandates**: Anjeo acts alone inside limits you write (argument bounds, daily
+  count, live checks), and asks you with the reason outside them. They fail
+  closed, are serialised per mandate so parallel calls can't overrun a daily
+  cap, and never cover an owner-only tool.
+- **Routines**: scheduled thinking. FXRizon is now triggered by Anjeo's own
+  thoughts, inside the trading mandate.
+- **FXRizon adapter** (FXRizon repo, `bridges/anjeo_mcp`): tickets go only
+  through FXRizon's intent rail, with an FXRizon-side group allowlist and risk
+  ceiling. Kill, resume and AI-profile changes are owner-only.
+
 ## Roadmap, in order of what it unlocks
 
-1. **FXRizon as an MCP server.** Wrap `trading_agent` status, positions, risk
-   profile and kill switch as tools. Reads get `allow`; anything that changes
-   risk or places orders gets `deny` or `approve` through explicit rules.
+1. ~~FXRizon as an MCP server.~~ Shipped in v0.2. Next: run it on demo, then
+   read the traces before widening any mandate.
 2. **Push approvals.** Expo push notifications when the Inbox gets an item, with
    Approve/Reject as notification actions. The phone becomes the hardware key
    for your digital self.
@@ -37,11 +48,10 @@ Three things make that real:
 4. **Anjeo as an MCP server.** Expose the namespaced tools and memory over
    `/mcp`, so Claude Desktop or Claude Code use your digital self. Every call
    still goes through the same gateway and lands in the same Inbox.
-5. **Standing intents.** "Every morning, triage my inbox and queue replies."
-   Scheduled asks whose actions pile up in the Inbox for one review pass.
+5. ~~Standing intents.~~ Shipped as routines in v0.2.
 6. **Trust that grows.** Per-tool approval history ("you approved 40 of 40
-   `email_send` to existing threads") suggests promoting narrow patterns to
-   `allow`, but only as a rule *you* accept into `anjeo.toml`, never silently.
+   `email_send` to existing threads") suggests a mandate, or a wider one, but
+   only as a change *you* accept into `anjeo.toml`, never silently.
 7. **Voice from evidence.** Learn memory from approved and edited drafts (what
    you changed is the signal) and propose memory updates, which also need
    your approval.
